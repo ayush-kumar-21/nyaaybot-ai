@@ -235,4 +235,4 @@ npm run lint
 
 ## License
 
-This project is private and proprietary.
+This project is proprietary.
