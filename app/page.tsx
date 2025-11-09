@@ -47,10 +47,10 @@ function MarkdownRenderer({ text }: { text: string }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, rowIdx) => (
-                <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-[rgba(255,255,255,0.08)]' : 'bg-[rgba(255,255,255,0.03)]'}>
-                  {row.map((cell, cellIdx) => (
-                    <td key={cellIdx} className="border border-[rgba(255,255,255,0.3)] px-5 py-4 text-[#2d3748] leading-relaxed align-top">
+              {rows.map((row, rIdx) => (
+                <tr key={rIdx}>
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx} className="border border-[rgba(255,255,255,0.05)] px-5 py-3 text-[#2d3748] text-[0.9375rem]">
                       {renderInlineMarkdown(cell)}
                     </td>
                   ))}
@@ -715,7 +715,7 @@ export default function Home() {
                   links: [
                     { label: '🔗 LinkedIn', href: 'https://www.linkedin.com/in/sai-swarup-shroff-3b5270322' },
                     { label: '💻 GitHub', href: 'https://github.com/shroff45' },
-                    { label: '📧 Email', href: '#' },
+                    { label: '📧 Email', href: 'mailto:sswarup.sai@gmail.com' },
                   ],
                 },
               ].map((author, idx) => (
