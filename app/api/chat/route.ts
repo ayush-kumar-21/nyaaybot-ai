@@ -9,12 +9,17 @@ const ollama = new Ollama({
   host: process.env.OLLAMA_HOST || 'http://localhost:11434',
 });
 
+// Model configuration - can be overridden via environment variable
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gpt-oss:120b-cloud';
+// Alternative model for reference: 'gpt-oss:20b'
+
 // Initialize profanity filter
 const filter = new Filter();
 filter.addWords(...[]); // Add custom words if needed
 
-// Valid sources for Constitution of India
+// Valid sources for constitutions - government and legal databases
 const VALID_SOURCES = [
+  // Indian sources
   'indiankanoon.org',
   'lawcommissionofindia.nic.in',
   'legislative.gov.in',
@@ -23,29 +28,68 @@ const VALID_SOURCES = [
   'judis.nic.in',
   'constitutionofindia.net',
   'mea.gov.in',
+  // International legal databases and government sources
+  'constituteproject.org',
+  'constitutionnet.org',
+  'worldconstitutions.org',
+  'constitution.org',
+  'loc.gov', // Library of Congress
+  'congress.gov',
+  'usconstitution.net',
+  'gov.uk', // UK government
+  'legislation.gov.uk',
+  'canada.ca', // Canadian government
+  'justice.gc.ca',
+  'aph.gov.au', // Australian government
+  'legislation.gov.au',
+  'gov.za', // South African government
+  'justice.gov.za',
+  'gov.ie', // Irish government
+  'oireachtas.ie',
+  'govt.nz', // New Zealand government
+  'legislation.govt.nz',
+  'europa.eu', // European Union
+  'eur-lex.europa.eu',
+  'un.org', // United Nations
+  'ohchr.org', // UN Human Rights
+  'wipo.int', // World Intellectual Property Organization
+  // Country-specific government domains (will be used dynamically)
+  '.gov',
+  '.gov.uk',
+  '.gov.au',
+  '.gov.ca',
+  '.gov.za',
+  '.gov.ie',
+  '.govt.nz',
+  '.gov.in',
+  '.nic.in',
 ];
 
-// Constitution-related keywords to filter content
+// Constitution-related keywords to filter content (international)
 const CONSTITUTION_KEYWORDS = [
   'constitution',
+  'constitutional',
   'article',
-  'fundamental right',
-  'directive principle',
   'amendment',
   'preamble',
   'parliament',
+  'congress',
   'legislature',
+  'legislative',
   'judiciary',
+  'judicial',
   'executive',
   'citizen',
   'citizenship',
   'state',
   'union',
+  'federation',
   'president',
+  'prime minister',
   'governor',
   'supreme court',
   'high court',
-  'constitutional',
+  'constitutional court',
   'legal',
   'law',
   'act',
@@ -58,18 +102,80 @@ const CONSTITUTION_KEYWORDS = [
   'clause',
   'provision',
   'right',
+  'human right',
+  'fundamental right',
   'duty',
   'freedom',
-  'equality',
   'liberty',
+  'equality',
   'justice',
-  'fraternity',
-  'secular',
+  'democracy',
   'democratic',
   'republic',
   'sovereign',
-  'socialist',
+  'sovereignty',
+  'separation of powers',
+  'checks and balances',
+  'bill of rights',
+  'charter',
+  'declaration',
+  'treaty',
+  'ratification',
 ];
+
+// Country name mapping for better search
+const COUNTRY_NAMES: { [key: string]: string } = {
+  'usa': 'United States',
+  'us': 'United States',
+  'america': 'United States',
+  'uk': 'United Kingdom',
+  'britain': 'United Kingdom',
+  'canada': 'Canada',
+  'australia': 'Australia',
+  'new zealand': 'New Zealand',
+  'south africa': 'South Africa',
+  'ireland': 'Ireland',
+  'germany': 'Germany',
+  'france': 'France',
+  'italy': 'Italy',
+  'spain': 'Spain',
+  'japan': 'Japan',
+  'china': 'China',
+  'brazil': 'Brazil',
+  'mexico': 'Mexico',
+  'india': 'India',
+  'pakistan': 'Pakistan',
+  'bangladesh': 'Bangladesh',
+  'sri lanka': 'Sri Lanka',
+  'nepal': 'Nepal',
+  'bangladesh': 'Bangladesh',
+};
+
+// Extract country name from query
+function extractCountry(query: string): { country: string | null; queryWithoutCountry: string } {
+  const lowerQuery = query.toLowerCase();
+  
+  for (const [key, country] of Object.entries(COUNTRY_NAMES)) {
+    if (lowerQuery.includes(key)) {
+      return {
+        country,
+        queryWithoutCountry: query.replace(new RegExp(key, 'gi'), '').trim(),
+      };
+    }
+  }
+  
+  // Check for common country name patterns
+  const countryPattern = /(?:constitution of|constitution in|constitution for)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i;
+  const match = query.match(countryPattern);
+  if (match && match[1]) {
+    return {
+      country: match[1],
+      queryWithoutCountry: query.replace(countryPattern, '').trim(),
+    };
+  }
+  
+  return { country: null, queryWithoutCountry: query };
+}
 
 // Check if text is Constitution-related
 function isConstitutionRelated(text: string): boolean {
@@ -114,22 +220,40 @@ function extractCleanText($: cheerio.CheerioAPI): string {
 // Search for Constitution-related information from valid sources
 async function searchConstitutionInfo(query: string): Promise<string> {
   try {
-    // Ensure query is Constitution-related
-    const lowerQuery = query.toLowerCase();
+    // Extract country from query
+    const { country, queryWithoutCountry } = extractCountry(query);
+    const countryName = country || 'India'; // Default to India if no country specified
+    
+    // Build constitution query
+    let constitutionQuery = query;
     if (!isConstitutionRelated(query)) {
-      // Add Constitution context to query
-      query = `Constitution of India ${query}`;
+      constitutionQuery = `Constitution of ${countryName} ${queryWithoutCountry || query}`;
+    } else if (country) {
+      constitutionQuery = `Constitution of ${countryName} ${queryWithoutCountry}`;
     }
     
     let context = '';
     const maxContextLength = 5000; // Limit total context length
     
-    for (const source of VALID_SOURCES) {
+    // Prioritize sources based on country
+    const sourcesToSearch = country 
+      ? [
+          // International databases first
+          'constituteproject.org',
+          'constitutionnet.org',
+          'worldconstitutions.org',
+          'constitution.org',
+          'loc.gov',
+          ...VALID_SOURCES.filter(s => !s.startsWith('.'))
+        ]
+      : VALID_SOURCES.filter(s => !s.startsWith('.')); // Filter out domain patterns
+    
+    for (const source of sourcesToSearch) {
       if (context.length >= maxContextLength) break;
       
       try {
         // Search specifically for Constitution content
-        const sourceQuery = `site:${source} "Constitution of India" ${query}`;
+        const sourceQuery = `site:${source} "${constitutionQuery}"`;
         
         const response = await axios.get(
           `https://www.google.com/search?q=${encodeURIComponent(sourceQuery)}`,
@@ -234,7 +358,7 @@ export async function POST(request: NextRequest) {
     if (!validation.valid) {
       return NextResponse.json(
         { 
-          error: 'Your message contains inappropriate content. Please ask questions only about the Constitution of India.',
+          error: 'Your message contains inappropriate content. Please ask questions only about constitutions and constitutional law.',
         },
         { status: 400 }
       );
@@ -242,41 +366,59 @@ export async function POST(request: NextRequest) {
 
     const filteredMessage = validation.filtered || message;
 
-    // Search for Constitution-related information ONLY
+    // Extract country from query
+    const { country } = extractCountry(filteredMessage);
+    const countryName = country || 'India'; // Default to India if no country specified
+
+    // Search for Constitution-related information
     const webContext = await searchConstitutionInfo(filteredMessage);
 
-    // Prepare strict system prompt focused ONLY on Constitution
-    const systemPrompt = `You are NYAAYBOT, an AI assistant EXCLUSIVELY specialized in providing information about the Constitution of India. 
+    // Prepare system prompt for any country's constitution
+    const systemPrompt = `You are NYAAYBOT, a friendly and approachable AI assistant specialized in providing information about constitutions from around the world. You're here to help users understand constitutional law in a warm, welcoming, and easy-to-understand way.
+
+YOUR PERSONALITY:
+- Be friendly, warm, and conversational
+- Use a helpful and encouraging tone
+- Show enthusiasm about helping users learn
+- Be patient and understanding
+- Use simple language when explaining complex legal concepts
+- Feel free to use emojis occasionally to make responses more engaging (but don't overuse them)
+- Be conversational, as if talking to a friend who's curious about law
 
 STRICT RULES:
-1. ONLY answer questions about the Constitution of India, its articles, amendments, provisions, and related legal concepts
-2. If asked about anything else, politely redirect to Constitution-related topics
+1. Answer questions about the Constitution of ${countryName} (or any country mentioned in the query), including articles, amendments, provisions, and related legal concepts
+2. If asked about non-constitutional topics, politely and friendly redirect to constitution-related topics
 3. NEVER use profanity, inappropriate language, or offensive content
-4. Keep responses professional, accurate, and Constitution-focused
-5. Use ONLY the provided web context from valid legal sources
-6. If web context is not Constitution-related, ignore it
+4. Keep responses accurate, constitution-focused, but friendly and approachable
+5. Use ONLY the provided web context from valid legal sources (government websites, legal databases, constitutional law resources)
+6. If web context is not constitution-related, ignore it
+7. When discussing any country's constitution, provide accurate, factual information from legitimate sources
 
 You should provide accurate, helpful information about:
-- Fundamental Rights (Articles 12-35)
-- Directive Principles of State Policy (Articles 36-51)
-- Fundamental Duties (Article 51A)
-- Constitutional Amendments
-- Constitutional Provisions and Articles
-- Legal concepts related to the Indian Constitution
-- Constitutional history and structure
+- Constitutional articles, sections, and provisions
+- Constitutional amendments
+- Fundamental rights, human rights, and civil liberties
+- Constitutional structure and branches of government
+- Constitutional history and development
+- Legal concepts related to constitutional law
+- Comparative constitutional analysis when relevant
 
-Web search context (ONLY Constitution-related content):
+Web search context (ONLY Constitution-related content from legitimate sources):
 ${webContext}
 
 IMPORTANT: 
-- If the question is not about the Constitution of India, politely say: "I can only help with questions about the Constitution of India. Please ask about constitutional articles, amendments, fundamental rights, or related legal provisions."
+- Be friendly and approachable while maintaining accuracy
 - Always cite sources when possible
-- Provide accurate information only
-- Keep language professional and appropriate`;
+- If information is not available, acknowledge this honestly and offer to help with related topics
+- Use warm, conversational language while staying professional
+- When comparing constitutions, be objective and factual but explain in a friendly way
+- Respect the legal and cultural context of each country's constitution
+- Make complex legal concepts accessible and easy to understand
+- Show genuine interest in helping the user learn`;
 
-    // Get response from Ollama using gpt-oss:20b model
+    // Get response from Ollama using configured model
     const response = await ollama.chat({
-      model: 'gpt-oss:20b',
+      model: OLLAMA_MODEL,
       messages: [
         ...conversationHistory,
         {
@@ -300,8 +442,8 @@ IMPORTANT:
 
     // Final check: Ensure response is Constitution-related
     if (!isConstitutionRelated(botMessage) && botMessage.length > 50) {
-      // If response is not Constitution-related, add a redirect
-      botMessage = "I can only help with questions about the Constitution of India. Please ask about constitutional articles, amendments, fundamental rights, or related legal provisions.\n\n" + botMessage;
+      // If response is not Constitution-related, add a friendly redirect
+      botMessage = "I'd love to help! I specialize in answering questions about constitutions from around the world. Feel free to ask me about constitutional articles, amendments, rights, or any related legal provisions. 😊\n\n" + botMessage;
     }
 
     return NextResponse.json({
@@ -317,8 +459,8 @@ IMPORTANT:
     if (errorMessage.includes('ECONNREFUSED') || (error as { code?: string }).code === 'ECONNREFUSED') {
       return NextResponse.json(
         {
-          error: 'Cannot connect to Ollama. Please ensure Ollama is running and the gpt-oss:20b model is installed.',
-          details: 'Run: ollama pull gpt-oss:20b',
+          error: `Cannot connect to Ollama. Please ensure Ollama is running and the ${OLLAMA_MODEL} model is available.`,
+          details: `Check available models with: ollama list. Supported models: gpt-oss:120b-cloud (default), gpt-oss:20b (alternative)`,
         },
         { status: 503 }
       );

@@ -1,6 +1,6 @@
 # NYAAYBOT - AI-Powered Legal Assistant
 
-NYAAYBOT is a comprehensive AI-powered legal assistant designed to make understanding Indian law accessible to everyone. The application uses Ollama with a local LLM (gpt-oss:20b) for reasoning and provides features for Constitution chatbot and document analysis.
+NYAAYBOT is a comprehensive AI-powered legal assistant designed to make understanding Indian law accessible to everyone. The application uses Ollama with a local LLM (gpt-oss:120b-cloud) for reasoning and provides features for Constitution chatbot and document analysis.
 
 ## Features
 
@@ -17,7 +17,7 @@ NYAAYBOT is a comprehensive AI-powered legal assistant designed to make understa
 
 1. **Node.js** (v18 or higher)
 2. **Ollama** installed and running
-3. **gpt-oss:20b model** installed in Ollama
+3. **Ollama model** available (default: `gpt-oss:120b-cloud`, alternative: `gpt-oss:20b`)
 
 ## Setup Instructions
 
@@ -38,26 +38,28 @@ curl -fsSL https://ollama.com/install.sh | sh
 **Windows:**
 Download from [https://ollama.com/download](https://ollama.com/download)
 
-### 2. Install and Run Ollama Model
+### 2. Run Ollama Model
 
 Start Ollama service:
 ```bash
 ollama serve
 ```
 
-In a new terminal, pull the gpt-oss:20b model:
-```bash
-ollama pull gpt-oss:20b
-```
+The model should already be available in your Ollama setup. The default model is `gpt-oss:120b-cloud`, with `gpt-oss:20b` as an alternative reference model.
 
-**Note:** The model name might be different. Check available models with:
+Verify available models with:
 ```bash
 ollama list
 ```
 
-If the model name is different, update the model name in:
-- `app/api/chat/route.ts` (line with `model: 'gpt-oss:20b'`)
-- `app/api/analyze/route.ts` (line with `model: 'gpt-oss:20b'`)
+**Supported Models:**
+- **Primary**: `gpt-oss:120b-cloud` (default)
+- **Alternative**: `gpt-oss:20b` (for reference/fallback)
+
+**Note:** To use a different model, set the `OLLAMA_MODEL` environment variable in `.env.local`:
+```env
+OLLAMA_MODEL=gpt-oss:20b
+```
 
 ### 3. Install Dependencies
 
@@ -72,9 +74,16 @@ Create a `.env.local` file in the `nyaaybot-ai` directory:
 
 ```env
 OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=gpt-oss:120b-cloud
 ```
 
-If Ollama is running on a different host or port, update this value.
+**Configuration options:**
+- `OLLAMA_HOST`: Ollama server host (default: `http://localhost:11434`)
+- `OLLAMA_MODEL`: Model to use (default: `gpt-oss:120b-cloud`)
+  - **Primary model**: `gpt-oss:120b-cloud` (default)
+  - **Alternative model**: `gpt-oss:20b` (for reference/fallback)
+
+If Ollama is running on a different host or port, update `OLLAMA_HOST`. To use the alternative model, set `OLLAMA_MODEL=gpt-oss:20b`.
 
 ### 5. Run the Development Server
 
@@ -94,7 +103,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
    - **Filter your input**: Automatically filters profanity and inappropriate language
    - **Search Constitution-only content**: Extracts only Constitution-related information from valid legal sources
    - **Content moderation**: Filters out non-Constitution content and inappropriate language
-   - **Use Ollama with gpt-oss:20b**: Provides accurate, Constitution-focused answers
+   - **Use Ollama with configured model**: Provides accurate, Constitution-focused answers (default: gpt-oss:120b-cloud, alternative: gpt-oss:20b)
    - **Cite sources**: References valid legal sources when available
    - **Strict Constitution focus**: Only responds to Constitution-related questions; redirects other queries
 
@@ -163,8 +172,12 @@ If you see "Cannot connect to Ollama":
 ### Model Not Found
 
 If you see "model not found":
-1. Pull the correct model: `ollama pull gpt-oss:20b`
-2. Or update the model name in the API routes to match your installed model
+1. Verify the model is available: `ollama list`
+2. Check your `.env.local` file for `OLLAMA_MODEL` setting
+3. Supported models:
+   - `gpt-oss:120b-cloud` (default)
+   - `gpt-oss:20b` (alternative)
+4. If using a different model, set `OLLAMA_MODEL` in `.env.local` or update the default in the API routes
 
 ### Document Analysis Fails
 
@@ -218,7 +231,7 @@ npm run lint
 
 - The web search feature may have limitations due to Google's anti-scraping measures. For production use, consider using a proper search API.
 - OCR processing may take time for large images.
-- Ensure sufficient system resources for running the gpt-oss:20b model locally.
+- Ensure sufficient system resources for running the Ollama model locally (default: gpt-oss:120b-cloud, alternative: gpt-oss:20b).
 
 ## License
 
